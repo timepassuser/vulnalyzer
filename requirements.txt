@@ -1,0 +1,4 @@
+requests>=2.31.0
+packaging>=24.0
+fastapi>=0.110.0
+uvicorn>=0.29.0

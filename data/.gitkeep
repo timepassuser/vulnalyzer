@@ -1,0 +1,2 @@
+# This directory holds the SQLite database and graph JSON export.
+# Both are generated at runtime and should be added to .gitignore.

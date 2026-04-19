@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Vulnalyzer — Dependency Vulnerability Graph</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#070b14;font-family:'Space Grotesk',monospace}
+:root{
+  --bg:#070b14;--bg2:rgba(10,16,28,0.95);--border:rgba(255,255,255,0.08);
+  --text:#f1f5f9;--muted:#64748b;--dim:#334155;
+  --red:#ef4444;--orange:#f97316;--yellow:#eab308;--green:#22c55e;--blue:#3b82f6;--purple:#8b5cf6;
+}
+button{font-family:inherit;cursor:pointer}
+a{font-family:inherit}
+
+/* LAYOUT */
+#app{width:100vw;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* NAVBAR */
+#navbar{
+  height:54px;display:flex;align-items:center;padding:0 20px;gap:0;flex-shrink:0;
+  background:rgba(7,11,20,0.9);border-bottom:1px solid rgba(255,255,255,0.06);
+  backdrop-filter:blur(20px);position:relative;z-index:100;
+}
+#logo{display:flex;align-items:center;gap:10px;margin-right:36px;flex-shrink:0}
+#logo-icon{
+  width:30px;height:30px;border-radius:8px;
+  background:linear-gradient(135deg,var(--blue),var(--purple));
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 16px rgba(59,130,246,0.4),0 0 32px rgba(139,92,246,0.2);
+}
+#logo-text{
+  font-size:17px;font-weight:700;letter-spacing:-0.02em;
+  background:linear-gradient(90deg,#60a5fa,#a78bfa);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 0 12px rgba(59,130,246,0.5));
+}
+.nav-link{
+  background:none;border:none;padding:6px 14px;border-radius:7px;
+  font-size:13px;font-weight:500;color:var(--muted);transition:all 0.15s;position:relative;
+}
+.nav-link.active{color:var(--text);background:rgba(255,255,255,0.07)}
+.nav-link:hover:not(.active){color:#94a3b8;background:rgba(255,255,255,0.04)}
+.nav-spacer{flex:1}
+.live-badge{
+  font-size:11px;padding:4px 10px;cursor:pointer;
+  background:rgba(255,255,255,0.04);border-radius:6px;border:1px solid rgba(255,255,255,0.07);
+  color:var(--muted);transition:all .15s;
+}
+.live-badge:hover{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.14);}
+.live-badge.is-live{color:#22c55e;border-color:rgba(34,197,94,0.3);background:rgba(34,197,94,0.07);}
+.live-badge.is-demo{color:#f97316;border-color:rgba(249,115,22,0.3);background:rgba(249,115,22,0.07);}
+
+/* PIPELINE MODAL */
+#pipeline-overlay{
+  position:fixed;inset:0;z-index:500;display:none;align-items:flex-start;justify-content:flex-end;
+  padding:68px 16px 0;background:rgba(0,0,0,0.4);backdrop-filter:blur(4px);
+}
+#pipeline-overlay.open{display:flex;}
+#pipeline-box{
+  width:380px;max-height:calc(100vh - 84px);overflow-y:auto;
+  background:rgba(10,16,28,0.97);border:1px solid rgba(255,255,255,0.1);
+  border-radius:14px;padding:0;box-shadow:0 24px 64px rgba(0,0,0,0.6);
+}
+.pipe-header{
+  padding:16px 18px 12px;border-bottom:1px solid rgba(255,255,255,0.06);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.pipe-title{font-size:14px;font-weight:700;color:var(--text);}
+.pipe-close{background:none;border:none;color:var(--muted);font-size:18px;padding:0 2px;line-height:1;}
+.pipe-close:hover{color:var(--text);}
+.pipe-section{padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.04);}
+.pipe-section:last-child{border-bottom:none;}
+.pipe-section-title{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+.pipe-row{display:flex;gap:8px;margin-bottom:8px;align-items:flex-start;}
+.pipe-row:last-child{margin-bottom:0;}
+.pipe-input{
+  flex:1;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);
+  border-radius:7px;padding:7px 10px;font-size:12px;color:var(--text);font-family:inherit;
+  outline:none;
+}
+.pipe-input:focus{border-color:rgba(59,130,246,0.5);}
+.pipe-input::placeholder{color:var(--muted);}
+.pipe-btn{
+  padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;border:none;
+  background:rgba(59,130,246,0.18);color:#93c5fd;border:1px solid rgba(59,130,246,0.3);
+  white-space:nowrap;transition:all .15s;font-family:inherit;
+}
+.pipe-btn:hover:not(:disabled){background:rgba(59,130,246,0.28);border-color:rgba(59,130,246,0.5);}
+.pipe-btn:disabled{opacity:.4;cursor:not-allowed;}
+.pipe-btn.green{background:rgba(34,197,94,0.15);color:#86efac;border-color:rgba(34,197,94,0.3);}
+.pipe-btn.green:hover:not(:disabled){background:rgba(34,197,94,0.25);}
+.pipe-btn.red{background:rgba(239,68,68,0.15);color:#fca5a5;border-color:rgba(239,68,68,0.3);}
+.pipe-log{
+  background:rgba(0,0,0,0.3);border-radius:7px;padding:10px;font-size:11px;
+  color:#94a3b8;font-family:monospace;max-height:140px;overflow-y:auto;
+  border:1px solid rgba(255,255,255,0.05);margin-top:8px;line-height:1.6;
+  display:none;
+}
+.pipe-log.show{display:block;}
+.pipe-log-ok{color:#86efac;}
+.pipe-log-err{color:#fca5a5;}
+.pipe-status{
+  font-size:11px;padding:6px 10px;border-radius:6px;margin-top:8px;
+  background:rgba(255,255,255,0.04);color:var(--muted);
+}
+
+/* EMPTY STATE */
+#empty-state{
+  position:absolute;inset:0;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:16px;z-index:10;
+  background:rgba(7,11,20,0.85);backdrop-filter:blur(6px);
+}
+#empty-state.show{display:flex;}
+.es-icon{font-size:48px;line-height:1;}
+.es-title{font-size:18px;font-weight:700;color:var(--text);}
+.es-sub{font-size:13px;color:var(--muted);max-width:420px;text-align:center;line-height:1.6;}
+.es-code{
+  background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.08);
+  border-radius:10px;padding:14px 18px;font-family:monospace;font-size:12px;
+  color:#93c5fd;line-height:1.9;max-width:480px;width:100%;
+}
+.es-btn{
+  padding:10px 24px;border-radius:9px;font-size:13px;font-weight:700;border:none;
+  background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;
+  box-shadow:0 0 20px rgba(59,130,246,0.3);cursor:pointer;font-family:inherit;
+  transition:all .15s;
+}
+.es-btn:hover{box-shadow:0 0 28px rgba(59,130,246,0.5);transform:translateY(-1px);}
+
+/* COPY BUTTON */
+.copy-btn{
+  display:inline-flex;align-items:center;gap:5px;margin-top:8px;
+  padding:6px 12px;border-radius:6px;font-size:11px;font-weight:600;
+  background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.25);
+  color:#86efac;cursor:pointer;font-family:inherit;transition:all .15s;
+}
+.copy-btn:hover{background:rgba(34,197,94,0.22);}
+.copy-btn.copied{background:rgba(34,197,94,0.3);border-color:rgba(34,197,94,0.5);}
+.alert-dot{
+  position:absolute;top:5px;right:7px;width:6px;height:6px;
+  border-radius:50%;background:var(--red);box-shadow:0 0 6px var(--red);
+}
+.avatar{
+  width:30px;height:30px;border-radius:50%;
+  background:linear-gradient(135deg,#1e3a5f,#312e81);
+  border:1.5px solid rgba(255,255,255,0.1);
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;color:#94a3b8;
+}
+
+/* STATS BAR */
+#statsbar{
+  height:52px;display:flex;align-items:center;padding:0 20px;gap:20px;flex-shrink:0;
+  background:rgba(7,11,20,0.7);border-bottom:1px solid rgba(255,255,255,0.04);
+  position:relative;z-index:90;
+}
+.stat-item{display:flex;flex-direction:column;gap:1px}
+.stat-label{font-size:10px;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase}
+.stat-value{font-size:16px;font-weight:700}
+.sep{width:1px;height:20px;background:rgba(255,255,255,0.07);flex-shrink:0}
+.filter-area{margin-left:auto;display:flex;align-items:center;gap:8px}
+.toggle-wrap{
+  display:flex;align-items:center;gap:7px;padding:6px 10px;border-radius:8px;
+  background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);
+  color:#94a3b8;font-size:12px;font-weight:500;user-select:none;
+}
+.toggle-wrap input{accent-color:#ef4444}
+
+/* FILTER BUTTONS */
+.filter-btn{
+  display:flex;align-items:center;gap:6px;
+  padding:6px 14px;border-radius:8px;font-size:12px;font-weight:500;
+  border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);
+  color:#94a3b8;transition:all 0.15s;
+}
+.filter-btn:hover{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.16);color:var(--text)}
+.filter-btn.active{
+  background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.4);color:#93c5fd;
+  border-radius:8px 0 0 8px;
+}
+.filter-clear{
+  padding:6px 8px;border-radius:0 8px 8px 0;font-size:14px;line-height:1;
+  border:1px solid rgba(59,130,246,0.4);border-left:none;
+  background:rgba(59,130,246,0.12);color:var(--muted);transition:all 0.15s;
+}
+.filter-clear:hover{color:var(--text)}
+.clear-all-btn{
+  padding:6px 12px;border-radius:8px;font-size:12px;
+  background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;
+  transition:all 0.15s;
+}
+.clear-all-btn:hover{background:rgba(239,68,68,0.18)}
+
+/* GRAPH AREA */
+#graph-area{flex:1;position:relative;overflow:hidden}
+#main-canvas{display:block;width:100%;height:100%;cursor:default}
+
+/* TOOLTIP */
+#tooltip{
+  position:absolute;pointer-events:none;opacity:0;transition:opacity 0.12s;
+  background:rgba(8,14,26,0.97);border:1px solid rgba(255,255,255,0.12);
+  border-radius:10px;padding:10px 14px;max-width:210px;z-index:80;
+  backdrop-filter:blur(12px);
+}
+.tt-name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:5px}
+.tt-row{display:flex;align-items:center;gap:6px;margin-top:3px}
+.tt-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0}
+.tt-type{font-size:11px;font-weight:500}
+.tt-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.tt-cve{font-size:11px;color:var(--red);margin-top:4px}
+.tt-hint{font-size:10px;color:var(--dim);margin-top:6px}
+
+/* SIDEBAR */
+#sidebar{
+  position:absolute;right:16px;top:16px;bottom:16px;width:296px;
+  background:rgba(8,14,26,0.93);border-radius:14px;overflow:hidden;
+  backdrop-filter:blur(20px);z-index:60;
+  transform:translateX(320px);transition:transform 0.22s cubic-bezier(0.16,1,0.3,1);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);
+}
+#sidebar.open{transform:translateX(0)}
+.sb-top-line{height:2px;background:var(--red)}
+.sb-header{padding:16px 18px;border-bottom:1px solid rgba(255,255,255,0.06)}
+#sb-close{
+  position:absolute;top:14px;right:14px;background:none;border:none;
+  color:var(--muted);font-size:20px;line-height:1;padding:4px 6px;transition:color 0.1s;
+}
+#sb-close:hover{color:var(--text)}
+.sb-risk-row{display:flex;align-items:center;gap:7px;margin-bottom:7px}
+.sb-risk-dot{width:8px;height:8px;border-radius:50%}
+.sb-risk-label{font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase}
+#sb-name{font-size:16px;font-weight:700;color:var(--text);margin-bottom:3px}
+#sb-version{font-size:12px;color:var(--muted)}
+.sb-body{padding:16px 18px;overflow-y:auto;max-height:calc(100% - 90px)}
+.sb-card{border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.sb-card-vuln{background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.22)}
+.sb-card-fix{background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.18)}
+.sb-card-warn{background:rgba(249,115,22,0.07);border:1px solid rgba(249,115,22,0.22)}
+.sb-card-safe{background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.15)}
+.sb-card-med{background:rgba(234,179,8,0.07);border:1px solid rgba(234,179,8,0.18)}
+.sb-card-label{font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:7px}
+.sb-card-text{font-size:11px;line-height:1.55}
+.sev-badge{
+  display:inline-block;font-size:10px;font-weight:700;letter-spacing:0.1em;
+  text-transform:uppercase;padding:3px 8px;border-radius:4px;margin-top:6px;
+}
+.info-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+.info-label{font-size:11px;color:var(--muted)}
+.src-badge{
+  background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);
+  border-radius:5px;padding:2px 8px;font-size:11px;color:#94a3b8;
+}
+.sb-link{
+  display:flex;align-items:center;gap:8px;margin-top:10px;
+  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
+  border-radius:8px;padding:9px 12px;text-decoration:none;color:#94a3b8;
+  font-size:12px;transition:border-color 0.15s;
+}
+.sb-link:hover{border-color:rgba(255,255,255,0.18);color:var(--text)}
+.sb-pre{
+  margin-top:8px;white-space:pre-wrap;word-break:break-word;
+  max-height:180px;overflow:auto;padding:9px 10px;border-radius:8px;
+  background:rgba(0,0,0,0.22);border:1px solid rgba(255,255,255,0.07);
+  color:#cbd5e1;font-size:10.5px;line-height:1.45;
+}
+.sb-mini-list{display:flex;flex-direction:column;gap:7px;margin-top:8px}
+.sb-mini-item{font-size:11px;line-height:1.45;color:#cbd5e1;border-top:1px solid rgba(255,255,255,0.06);padding-top:7px}
+.sb-muted{color:var(--muted)}
+
+/* LEGEND */
+#legend{
+  position:absolute;bottom:14px;left:14px;z-index:70;
+  background:rgba(8,14,26,0.88);border:1px solid rgba(255,255,255,0.07);
+  border-radius:10px;padding:9px 14px;display:flex;gap:14px;
+  backdrop-filter:blur(12px);
+}
+.leg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
+.leg-dot{width:8px;height:8px;border-radius:50%}
+
+/* HINT */
+#hint{
+  position:absolute;bottom:14px;right:14px;z-index:70;
+  background:rgba(8,14,26,0.88);border:1px solid rgba(255,255,255,0.07);
+  border-radius:8px;padding:8px 12px;font-size:11px;color:var(--dim);
+  backdrop-filter:blur(12px);transition:right 0.22s cubic-bezier(0.16,1,0.3,1);
+}
+
+/* FILTER MODAL OVERLAY */
+#modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:200;
+  display:none;align-items:center;justify-content:center;backdrop-filter:blur(6px);
+}
+#modal-overlay.open{display:flex}
+#modal-box{
+  background:rgba(10,16,28,0.99);border:1px solid rgba(255,255,255,0.1);
+  border-radius:14px;width:360px;max-height:480px;overflow:hidden;
+  box-shadow:0 25px 60px rgba(0,0,0,0.7),0 0 0 1px rgba(255,255,255,0.04);
+  animation:fadeUp 0.18s ease;
+}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.modal-header{padding:16px 18px;border-bottom:1px solid rgba(255,255,255,0.07)}
+.modal-title-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.modal-title{font-size:13px;font-weight:600;color:var(--text)}
+.modal-close{background:none;border:none;color:var(--muted);font-size:20px;line-height:1;padding:4px}
+.modal-close:hover{color:var(--text)}
+#modal-search{
+  width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+  border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;
+  outline:none;font-family:inherit;
+}
+#modal-search:focus{border-color:rgba(59,130,246,0.4)}
+.modal-list{overflow-y:auto;max-height:320px;padding:8px 10px}
+.modal-item{
+  padding:9px 12px;border-radius:8px;font-size:13px;cursor:pointer;
+  color:#94a3b8;border:1px solid transparent;transition:all 0.1s;
+  margin-bottom:2px;display:flex;align-items:center;gap:8px;
+}
+.modal-item:hover{background:rgba(255,255,255,0.04);color:#cbd5e1}
+.modal-item.selected{
+  background:rgba(59,130,246,0.15);border-color:rgba(59,130,246,0.3);color:var(--text);
+}
+.modal-dot{width:6px;height:6px;border-radius:50%;background:var(--blue);display:none}
+.modal-item.selected .modal-dot{display:inline-block}
+.modal-item.repo-option{background:rgba(59,130,246,0.06);border-color:rgba(59,130,246,0.12)}
+.modal-item.repo-option:hover{background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.22)}
+.modal-kind{margin-left:auto;font-size:10px;color:#60a5fa;text-transform:uppercase;letter-spacing:.06em}
+.modal-empty{padding:16px;text-align:center;color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- NAVBAR -->
+  <nav id="navbar">
+    <div id="logo">
+      <div id="logo-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <circle cx="9" cy="9" r="2.8" fill="white"/>
+          <circle cx="3" cy="4.5" r="1.6" fill="white" opacity=".75"/>
+          <circle cx="15" cy="4.5" r="1.6" fill="white" opacity=".75"/>
+          <circle cx="4.5" cy="14.5" r="1.6" fill="white" opacity=".65"/>
+          <circle cx="14" cy="14" r="1.6" fill="white" opacity=".55"/>
+          <line x1="9" y1="9" x2="3" y2="4.5" stroke="white" stroke-width=".9" opacity=".5"/>
+          <line x1="9" y1="9" x2="15" y2="4.5" stroke="white" stroke-width=".9" opacity=".5"/>
+          <line x1="9" y1="9" x2="4.5" y2="14.5" stroke="white" stroke-width=".9" opacity=".45"/>
+          <line x1="9" y1="9" x2="14" y2="14" stroke="white" stroke-width=".9" opacity=".35"/>
+        </svg>
+      </div>
+      <span id="logo-text">Vulnalyzer</span>
+    </div>
+    <button class="nav-link active" onclick="setNav(this,'Home')">Home</button>
+    <button class="nav-link" onclick="setNav(this,'Repositories')">Repositories</button>
+    <button class="nav-link" onclick="setNav(this,'Alerts')" style="position:relative">
+      Alerts<span class="alert-dot"></span>
+    </button>
+    <button class="nav-link" onclick="setNav(this,'Settings')">Settings</button>
+    <div class="nav-spacer"></div>
+    <button class="live-badge" id="live-badge" onclick="togglePipeline()" title="Open pipeline controls">
+      <span id="live-dot">●</span>&nbsp;<span id="live-label">Connecting…</span>
+    </button>
+    &nbsp;&nbsp;
+    <div class="avatar">VX</div>
+  </nav>
+
+  <!-- PIPELINE MODAL -->
+  <div id="pipeline-overlay" onclick="if(event.target===this)togglePipeline()">
+    <div id="pipeline-box">
+      <div class="pipe-header">
+        <span class="pipe-title">⚙ Pipeline Controls</span>
+        <button class="pipe-close" onclick="togglePipeline()">×</button>
+      </div>
+      <div class="pipe-section">
+        <div class="pipe-section-title">Backend Status</div>
+        <div id="pipe-status-box" class="pipe-status">Checking…</div>
+      </div>
+      <div class="pipe-section">
+        <div class="pipe-section-title">1 — Ingest CVEs from OSV</div>
+        <div class="pipe-row">
+          <input class="pipe-input" id="ingest-pkg" placeholder="Package name (e.g. lodash)" />
+          <input class="pipe-input" id="ingest-eco" placeholder="Ecosystem (npm / PyPI)" style="max-width:130px"/>
+        </div>
+        <div class="pipe-row">
+          <button class="pipe-btn" onclick="runIngest()">Ingest CVEs</button>
+        </div>
+        <div class="pipe-log" id="ingest-log"></div>
+      </div>
+      <div class="pipe-section">
+        <div class="pipe-section-title">2 — Scan Repository</div>
+        <div class="pipe-row">
+          <input class="pipe-input" id="scan-url" placeholder="https://github.com/owner/repo" />
+        </div>
+        <div class="pipe-row">
+          <button class="pipe-btn" onclick="runScan(false)">Scan</button>
+          <button class="pipe-btn" style="opacity:.7" onclick="runScan(true)">Force re-scan</button>
+        </div>
+        <div class="pipe-log" id="scan-log"></div>
+      </div>
+      <div class="pipe-section">
+        <div class="pipe-section-title">3 — Rebuild Graph</div>
+        <div class="pipe-row">
+          <button class="pipe-btn green" onclick="runBuildGraph()">Rebuild Graph</button>
+          <button class="pipe-btn green" onclick="refreshGraph()">Refresh UI</button>
+        </div>
+        <div class="pipe-log" id="graph-log"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS BAR -->
+  <div id="statsbar">
+    <div class="stat-item">
+      <span class="stat-label">Total Nodes</span>
+      <span class="stat-value" id="s-total" style="color:#94a3b8">28</span>
+    </div>
+    <div class="sep"></div>
+    <div class="stat-item">
+      <span class="stat-label">Vulnerabilities</span>
+      <span class="stat-value" id="s-vulns" style="color:var(--red)">6</span>
+    </div>
+    <div class="sep"></div>
+    <div class="stat-item">
+      <span class="stat-label">Critical CVEs</span>
+      <span class="stat-value" id="s-critical" style="color:var(--red);text-shadow:0 0 12px var(--red)">3</span>
+    </div>
+    <div class="sep"></div>
+    <div class="stat-item">
+      <span class="stat-label">Affected Deps</span>
+      <span class="stat-value" id="s-affected" style="color:var(--orange)">10</span>
+    </div>
+
+    <div class="filter-area">
+      <label class="toggle-wrap" title="Show or hide individual CVE advisory nodes">
+        <input type="checkbox" id="toggle-cves" onchange="toggleCves(this.checked)" />
+        Show CVEs
+      </label>
+      <button class="filter-btn" id="btn-pkg" onclick="openModal('package')">
+        <span style="font-size:10px">⬡</span> Filter by Package
+      </button>
+      <button class="filter-btn" id="btn-cve" onclick="openModal('cve')">
+        <span style="font-size:10px">!</span> Filter by CVE
+      </button>
+      <button class="filter-btn" id="btn-src" onclick="openModal('source')">
+        <span style="font-size:10px">◎</span> Filter by Source
+      </button>
+      <button class="clear-all-btn" id="btn-clear" onclick="clearAll()" style="display:none">Clear all</button>
+    </div>
+  </div>
+
+  <!-- GRAPH AREA -->
+  <div id="graph-area">
+    <canvas id="main-canvas"></canvas>
+
+    <!-- EMPTY STATE -->
+    <div id="empty-state">
+      <div class="es-icon">🔍</div>
+      <div class="es-title">No Graph Data Yet</div>
+      <div class="es-sub">The database is empty. Run the pipeline to ingest CVEs, scan repositories, and build the graph.</div>
+      <div class="es-code">
+        # 1. Ingest CVEs<br>
+        python scripts/ingest_cves.py --package lodash --ecosystem npm<br>
+        python scripts/ingest_cves.py --package django --ecosystem PyPI<br><br>
+        # 2. Scan repos<br>
+        python scripts/scan_repo.py --url https://github.com/owner/repo<br><br>
+        # 3. Build graph<br>
+        python scripts/build_graph.py
+      </div>
+      <button class="es-btn" onclick="togglePipeline()">Open Pipeline Controls →</button>
+    </div>
+
+    <!-- TOOLTIP -->
+    <div id="tooltip">
+      <div class="tt-name" id="tt-name"></div>
+      <div class="tt-row">
+        <span class="tt-dot" id="tt-dot"></span>
+        <span class="tt-type" id="tt-type"></span>
+      </div>
+      <div class="tt-sub" id="tt-ver"></div>
+      <div class="tt-sub" id="tt-src"></div>
+      <div class="tt-cve" id="tt-cve"></div>
+      <div class="tt-hint">Click to inspect →</div>
+    </div>
+
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+      <div class="sb-top-line" id="sb-top-line"></div>
+      <div class="sb-header" style="position:relative">
+        <button id="sb-close" onclick="closeSidebar()">×</button>
+        <div class="sb-risk-row">
+          <span class="sb-risk-dot" id="sb-dot"></span>
+          <span class="sb-risk-label" id="sb-risk-label"></span>
+        </div>
+        <div id="sb-name"></div>
+        <div id="sb-version"></div>
+      </div>
+      <div class="sb-body" id="sb-body"></div>
+    </div>
+
+    <!-- LEGEND -->
+    <div id="legend">
+      <div class="leg-item"><div class="leg-dot" style="background:var(--blue);box-shadow:0 0 6px var(--blue)"></div>Root</div>
+      <div class="leg-item"><div class="leg-dot" style="background:var(--red);box-shadow:0 0 6px var(--red)"></div>Vulnerable</div>
+      <div class="leg-item"><div class="leg-dot" style="background:var(--orange)"></div>High Risk</div>
+      <div class="leg-item"><div class="leg-dot" style="background:var(--yellow)"></div>Medium</div>
+      <div class="leg-item"><div class="leg-dot" style="background:var(--green)"></div>Safe</div>
+    </div>
+
+    <!-- HINT -->
+    <div id="hint">Scroll to zoom &nbsp;·&nbsp; Drag to pan &nbsp;·&nbsp; Click node to inspect</div>
+  </div>
+</div>
+
+<!-- FILTER MODAL -->
+<div id="modal-overlay" onclick="closeModal()">
+  <div id="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div class="modal-title-row">
+        <span class="modal-title" id="modal-title">Filter</span>
+        <button class="modal-close" onclick="closeModal()">×</button>
+      </div>
+      <input id="modal-search" type="text" placeholder="Search…" oninput="renderModalList()" style="display:none"/>
+    </div>
+    <div class="modal-list" id="modal-list"></div>
+  </div>
+</div>
+
+<script>
+// ─── STATE & CONFIG ──────────────────────────────────────────────
+let RAW = { nodes: [], links: [] };
+let IS_LIVE = false;
+
+const API_URL    = '/api/graph';
+const STATUS_URL = '/api/status';
+
+const CFG = {
+  root:      {color:'#3b82f6',r:26},
+  vulnerable:{color:'#ef4444',r:18},
+  high:      {color:'#f97316',r:15},
+  medium:    {color:'#eab308',r:13},
+  safe:      {color:'#22c55e',r:11},
+};
+const SEV_COL  = {Critical:'#ef4444',High:'#f97316',Medium:'#eab308',Low:'#22c55e'};
+const SEV_BG   = {Critical:'rgba(239,68,68,0.2)',High:'rgba(249,115,22,0.2)',Medium:'rgba(234,179,8,0.2)',Low:'rgba(34,197,94,0.2)'};
+const TYPE_LBL = {root:'Root Project',vulnerable:'VULNERABLE',high:'HIGH RISK',medium:'MEDIUM RISK',safe:'SAFE'};
+
+const canvas = document.getElementById('main-canvas');
+const ctx    = canvas.getContext('2d');
+const area   = document.getElementById('graph-area');
+let W,H;
+let simNodes=[], simLinks=[];
+let pan={x:0,y:0}, zoom=1;
+let dragging=null, isPanning=false, panStart={x:0,y:0}, panOrigin={x:0,y:0};
+let hovId=null, selId=null;
+let rafId=null, ticks=0;
+let filterPkg=null, filterSrc=null, filterCve=null;
+let modalMode=null;
+let showCveNodes=false;
+
+// ─── DEMO DATA (fallback when API has no data) ───────────────────
+const DEMO_DATA = {
+  nodes:[
+    {id:"root",name:"vulnalyzer-app",type:"root",version:"2.1.0",source:"GitHub",cve:null,severity:null,fix:null,desc:"Demo mode — connect to backend for live data"},
+    {id:"v1",name:"lodash",type:"vulnerable",version:"4.17.11",source:"npm",cve:"CVE-2021-23337",severity:"Critical",fix:"Upgrade to 4.17.21+",desc:"Command injection via template functions"},
+    {id:"v2",name:"log4j-core",type:"vulnerable",version:"2.14.0",source:"Maven",cve:"CVE-2021-44228",severity:"Critical",fix:"Upgrade to 2.17.1+",desc:"Log4Shell – remote code execution via JNDI"},
+    {id:"v3",name:"axios",type:"vulnerable",version:"0.21.0",source:"npm",cve:"CVE-2023-45857",severity:"High",fix:"Upgrade to 1.6.0+",desc:"CSRF vulnerability via cross-origin credentials"},
+    {id:"v4",name:"minimist",type:"vulnerable",version:"1.2.0",source:"npm",cve:"CVE-2021-44906",severity:"Critical",fix:"Upgrade to 1.2.6+",desc:"Prototype pollution allows property injection"},
+    {id:"v5",name:"pyyaml",type:"vulnerable",version:"5.3.0",source:"PyPI",cve:"CVE-2020-14343",severity:"High",fix:"Upgrade to 5.4+",desc:"Arbitrary code execution via yaml.load()"},
+    {id:"v6",name:"xmlrpc",type:"vulnerable",version:"0.3.0",source:"npm",cve:"CVE-2019-14939",severity:"High",fix:"Use xmlrpc 1.0.0+",desc:"XML injection vulnerability"},
+    {id:"h1",name:"react-query",type:"high",version:"3.38.0",source:"npm",cve:null,severity:null,fix:"Run npm audit fix",desc:"Direct dependency on vulnerable axios"},
+    {id:"h2",name:"webpack",type:"high",version:"5.75.0",source:"npm",cve:null,severity:null,fix:"npm audit fix --force",desc:"Uses minimist internally for CLI parsing"},
+    {id:"h3",name:"spring-boot",type:"high",version:"2.5.0",source:"Maven",cve:null,severity:null,fix:"Upgrade to 2.7.x+",desc:"Bundles log4j-core as a runtime dependency"},
+    {id:"h4",name:"ansible",type:"high",version:"2.10.0",source:"PyPI",cve:null,severity:null,fix:"pip install --upgrade ansible pyyaml",desc:"Depends on pyyaml for configuration parsing"},
+    {id:"m1",name:"next.js",type:"medium",version:"13.0.0",source:"npm",cve:null,severity:null,fix:"Update dependency tree",desc:"Transitive dependency on lodash via internal helpers"},
+    {id:"m2",name:"babel-core",type:"medium",version:"7.21.0",source:"npm",cve:null,severity:null,fix:"Audit babel plugin chain",desc:"Indirect minimist chain via CLI helpers"},
+    {id:"m3",name:"jest",type:"medium",version:"29.0.0",source:"npm",cve:null,severity:null,fix:"jest audit and update",desc:"Transitive lodash dependency in test utilities"},
+    {id:"m4",name:"django-rest",type:"medium",version:"3.13.0",source:"PyPI",cve:null,severity:null,fix:"Patch pyyaml transitively",desc:"Depends on ansible for management commands"},
+    {id:"m5",name:"hibernate-core",type:"medium",version:"5.6.0",source:"Maven",cve:null,severity:null,fix:"Update via spring-boot BOM",desc:"Indirect log4j chain through spring-boot"},
+    {id:"m6",name:"gulp",type:"medium",version:"4.0.2",source:"npm",cve:null,severity:null,fix:"Upgrade build pipeline",desc:"webpack transitive via task runner plugins"},
+    {id:"s1",name:"react",type:"safe",version:"18.2.0",source:"npm",cve:null,severity:null,fix:null,desc:null},
+    {id:"s2",name:"typescript",type:"safe",version:"5.1.0",source:"npm",cve:null,severity:null,fix:null,desc:null},
+    {id:"s3",name:"tailwindcss",type:"safe",version:"3.3.0",source:"npm",cve:null,severity:null,fix:null,desc:null},
+    {id:"s4",name:"vite",type:"safe",version:"4.3.0",source:"npm",cve:null,severity:null,fix:null,desc:null},
+    {id:"s5",name:"zod",type:"safe",version:"3.21.0",source:"npm",cve:null,severity:null,fix:null,desc:null},
+    {id:"s6",name:"framer-motion",type:"safe",version:"10.12.0",source:"npm",cve:null,severity:null,fix:null,desc:null},
+    {id:"s7",name:"numpy",type:"safe",version:"1.24.0",source:"PyPI",cve:null,severity:null,fix:null,desc:null},
+    {id:"s8",name:"pandas",type:"safe",version:"2.0.0",source:"PyPI",cve:null,severity:null,fix:null,desc:null},
+    {id:"s9",name:"jackson-databind",type:"safe",version:"2.15.0",source:"Maven",cve:null,severity:null,fix:null,desc:null},
+    {id:"s10",name:"guava",type:"safe",version:"32.0.0",source:"Maven",cve:null,severity:null,fix:null,desc:null},
+    {id:"s11",name:"eslint",type:"safe",version:"8.44.0",source:"npm",cve:null,severity:null,fix:null,desc:null},
+  ],
+  links:[
+    {s:"root",t:"v1",d:true},{s:"root",t:"v3",d:true},{s:"root",t:"v6",d:true},
+    {s:"root",t:"h1",d:true},{s:"root",t:"h2",d:true},{s:"root",t:"h3",d:true},{s:"root",t:"h4",d:true},
+    {s:"root",t:"m1",d:true},{s:"root",t:"m2",d:true},{s:"root",t:"m3",d:true},
+    {s:"root",t:"s1",d:true},{s:"root",t:"s2",d:true},{s:"root",t:"s3",d:true},
+    {s:"root",t:"s4",d:true},{s:"root",t:"s11",d:true},
+    {s:"h1",t:"v3",d:true},{s:"h2",t:"v4",d:true},{s:"h3",t:"v2",d:true},{s:"h4",t:"v5",d:true},
+    {s:"m1",t:"v1",d:false},{s:"m1",t:"s6",d:false},
+    {s:"m2",t:"v4",d:false},{s:"m2",t:"h2",d:false},
+    {s:"m3",t:"v1",d:false},
+    {s:"m4",t:"h4",d:false},{s:"m4",t:"s7",d:false},
+    {s:"m5",t:"h3",d:false},{s:"m5",t:"s10",d:false},
+    {s:"m6",t:"h2",d:false},
+    {s:"h3",t:"s9",d:true},{s:"h3",t:"s10",d:true},
+    {s:"h4",t:"s8",d:true},
+    {s:"s1",t:"s6",d:true},
+    {s:"v6",t:"m6",d:false},
+  ]
+};
+
+// ─── BADGE HELPERS ───────────────────────────────────────────────
+function setBadgeLive(){
+  const b=document.getElementById('live-badge');
+  const d=document.getElementById('live-dot');
+  const l=document.getElementById('live-label');
+  b.className='live-badge is-live';
+  d.textContent='●'; d.style.color='#22c55e';
+  l.textContent='Live';
+}
+function setBadgeDemo(){
+  const b=document.getElementById('live-badge');
+  const d=document.getElementById('live-dot');
+  const l=document.getElementById('live-label');
+  b.className='live-badge is-demo';
+  d.textContent='◌'; d.style.color='#f97316';
+  l.textContent='Demo';
+}
+
+// ─── EMPTY STATE ─────────────────────────────────────────────────
+function showEmptyState(){
+  document.getElementById('empty-state').classList.add('show');
+}
+function hideEmptyState(){
+  document.getElementById('empty-state').classList.remove('show');
+}
+
+// ─── DATA LOADING ────────────────────────────────────────────────
+async function loadGraphData(){
+  showLoader('Connecting to Vulnalyzer backend…');
+  try {
+    // Check backend status first
+    const statusRes = await fetch(STATUS_URL, {signal:AbortSignal.timeout(5000)});
+    if(!statusRes.ok) throw new Error(`HTTP ${statusRes.status}`);
+    const status = await statusRes.json();
+
+    if(!status.hasData){
+      // Backend is reachable but DB is empty — show empty state + demo
+      RAW = DEMO_DATA;
+      IS_LIVE = false;
+      setBadgeDemo();
+      updatePipelineStatus(status);
+      showLoaderError('Backend reachable but no data yet. Showing demo — use pipeline to populate.');
+      await new Promise(r=>setTimeout(r,2400));
+      hideLoader();
+      showEmptyState();
+      return false;
+    }
+
+    // Fetch the real graph
+    const res = await fetch(API_URL, {signal:AbortSignal.timeout(8000)});
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if(!data.nodes||data.nodes.length===0) throw new Error('Empty graph response');
+    RAW = data;
+    IS_LIVE = true;
+    setBadgeLive();
+    updatePipelineStatus(status);
+    hideLoader();
+    hideEmptyState();
+    return true;
+  } catch(err){
+    RAW = DEMO_DATA;
+    IS_LIVE = false;
+    setBadgeDemo();
+    showLoaderError(`Backend unreachable: ${err.message}. Showing demo data.`);
+    await new Promise(r=>setTimeout(r,2200));
+    hideLoader();
+    return false;
+  }
+}
+
+async function refreshGraph(){
+  if(rafId) cancelAnimationFrame(rafId);
+  await loadGraphData();
+  initGraph();
+  closePipeline();
+}
+
+// ─── NAV ─────────────────────────────────────────────────────────
+function setNav(btn,name){
+  document.querySelectorAll('.nav-link').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────
+function initGraph(){
+  W=canvas.offsetWidth; H=canvas.offsetHeight;
+  canvas.width=W; canvas.height=H;
+  const cx=W/2, cy=H/2;
+  const map={};
+  const rootNodes=RAW.nodes.filter(n=>n.type==='root');
+  const rootCount=rootNodes.length;
+  let rootIndex=0;
+  simNodes = RAW.nodes.map((n,i)=>{
+    let x,y;
+    if(n.type==='root'){
+      if(rootCount===1){x=cx;y=cy;}
+      else{
+        const idx=rootIndex++;
+        const a=(idx/rootCount)*Math.PI*2-Math.PI/2;
+        const rr=Math.max(72,Math.min(170,rootCount*34));
+        x=cx+Math.cos(a)*rr;
+        y=cy+Math.sin(a)*rr;
+      }
+    }
+    else{
+      const a=(i/RAW.nodes.length)*Math.PI*2;
+      const rr={vulnerable:150,high:220,medium:295,safe:365}[n.type]||200;
+      x=cx+Math.cos(a)*rr+(Math.random()-.5)*50;
+      y=cy+Math.sin(a)*rr+(Math.random()-.5)*50;
+    }
+    const node={...n,x,y,vx:0,vy:0,vis:true};
+    map[n.id]=node; return node;
+  });
+  simLinks=RAW.links.map(l=>({...l,src:map[l.s],tgt:map[l.t],vis:true})).filter(l=>l.src&&l.tgt);
+  applyFilter();
+  updateStats();
+  if(rafId) cancelAnimationFrame(rafId);
+  rafId=requestAnimationFrame(loop);
+}
+
+// ─── PHYSICS ──────────────────────────────────────────────────────
+function tick(){
+  const vn=simNodes.filter(n=>n.vis);
+  const vl=simLinks.filter(l=>l.vis);
+  const cx=W/2,cy=H/2,alpha=0.052;
+  for(let i=0;i<vn.length;i++){
+    for(let j=i+1;j<vn.length;j++){
+      const a=vn[i],b=vn[j];
+      let dx=a.x-b.x,dy=a.y-b.y,d=Math.sqrt(dx*dx+dy*dy);
+      if(d<.1){
+        const angle=((i*31+j*17)%360)*Math.PI/180;
+        dx=Math.cos(angle)*.1;dy=Math.sin(angle)*.1;d=.1;
+      }
+      const ra=CFG[a.type]?.r||12, rb=CFG[b.type]?.r||12;
+      if(d<(ra+rb+60)*2.4){
+        const f=(2600/(d*d))*alpha;
+        const fx=(dx/d)*f,fy=(dy/d)*f;
+        a.vx+=fx;a.vy+=fy;b.vx-=fx;b.vy-=fy;
+      }
+    }
+  }
+  vl.forEach(l=>{
+    if(!l.src||!l.tgt)return;
+    const dx=l.tgt.x-l.src.x,dy=l.tgt.y-l.src.y,d=Math.sqrt(dx*dx+dy*dy)||.1;
+    const ideal=l.d?170:240;
+    const f=(d-ideal)*0.042;
+    const fx=(dx/d)*f,fy=(dy/d)*f;
+    l.src.vx+=fx;l.src.vy+=fy;l.tgt.vx-=fx;l.tgt.vy-=fy;
+  });
+  vn.forEach(n=>{
+    if(n===dragging)return;
+    n.vx+=(cx-n.x)*0.0018;n.vy+=(cy-n.y)*0.0018;
+    n.vx*=0.74;n.vy*=0.74;n.x+=n.vx;n.y+=n.vy;
+  });
+}
+
+// ─── DRAW ─────────────────────────────────────────────────────────
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#070b14';ctx.fillRect(0,0,W,H);
+  ctx.save();ctx.translate(pan.x,pan.y);ctx.scale(zoom,zoom);
+  const gs=44;
+  const sx=Math.floor(-pan.x/zoom/gs)*gs-gs, sy=Math.floor(-pan.y/zoom/gs)*gs-gs;
+  const ex=sx+(W/zoom)+gs*2, ey=sy+(H/zoom)+gs*2;
+  ctx.fillStyle='rgba(255,255,255,0.028)';
+  for(let gx=sx;gx<ex;gx+=gs)for(let gy=sy;gy<ey;gy+=gs){ctx.beginPath();ctx.arc(gx,gy,1,0,Math.PI*2);ctx.fill();}
+
+  const t=Date.now()/1000;
+  const connN=new Set(),connL=new Set();
+  if(selId){
+    simLinks.forEach(l=>{
+      if(l.src?.id===selId||l.tgt?.id===selId){connN.add(l.src?.id);connN.add(l.tgt?.id);connL.add(l);}
+    });
+  }
+
+  simLinks.forEach(l=>{
+    if(!l.vis||!l.src||!l.tgt)return;
+    const hi=selId?connL.has(l):true;
+    const vuln=l.tgt?.type==='vulnerable'||l.src?.type==='vulnerable';
+    const op=hi?(selId?0.88:0.5):0.055;
+    ctx.beginPath();ctx.moveTo(l.src.x,l.src.y);ctx.lineTo(l.tgt.x,l.tgt.y);
+    ctx.lineWidth=l.d?(hi?2:0.5):(hi?1:0.4);
+    if(vuln&&hi){ctx.strokeStyle=`rgba(239,68,68,${op})`;ctx.setLineDash([5,4]);ctx.lineDashOffset=-t*16;}
+    else{ctx.strokeStyle=`rgba(148,163,184,${op})`;ctx.setLineDash([]);}
+    ctx.stroke();ctx.setLineDash([]);
+    if(hi){
+      const ang=Math.atan2(l.tgt.y-l.src.y,l.tgt.x-l.src.x);
+      const tr=(CFG[l.tgt?.type]?.r||12)+3;
+      const tx=l.tgt.x-Math.cos(ang)*tr,ty=l.tgt.y-Math.sin(ang)*tr;
+      ctx.beginPath();
+      ctx.moveTo(tx-Math.cos(ang-.44)*7,ty-Math.sin(ang-.44)*7);
+      ctx.lineTo(tx,ty);
+      ctx.lineTo(tx-Math.cos(ang+.44)*7,ty-Math.sin(ang+.44)*7);
+      ctx.strokeStyle=vuln?`rgba(239,68,68,${op})`:`rgba(148,163,184,${op})`;
+      ctx.lineWidth=1.1;ctx.setLineDash([]);ctx.stroke();
+    }
+  });
+
+  simNodes.forEach(n=>{
+    if(!n.vis)return;
+    const cfg=CFG[n.type]||CFG.safe;
+    const isSel=n.id===selId,isHov=n.id===hovId;
+    const inConn=selId?connN.has(n.id):true;
+    const dim=selId&&!inConn;
+    const r=cfg.r;
+
+    if(!dim){
+      const ga=isSel?.65:(isHov?.42:(n.type==='vulnerable'||n.type==='root'?.22:.1));
+      const gr=ctx.createRadialGradient(n.x,n.y,r*.5,n.x,n.y,r+(isSel?18:11));
+      gr.addColorStop(0,cfg.color+Math.round(ga*255).toString(16).padStart(2,'0'));
+      gr.addColorStop(1,cfg.color+'00');
+      ctx.beginPath();ctx.arc(n.x,n.y,r+(isSel?18:11),0,Math.PI*2);
+      ctx.fillStyle=gr;ctx.fill();
+    }
+    if((n.type==='vulnerable'||n.type==='root')&&!dim){
+      const p=(Math.sin(t*2.5+n.x*.01)+1)/2;
+      ctx.beginPath();ctx.arc(n.x,n.y,r+5+p*5,0,Math.PI*2);
+      ctx.strokeStyle=cfg.color+'30';ctx.lineWidth=1.5;ctx.stroke();
+    }
+    ctx.beginPath();ctx.arc(n.x,n.y,r,0,Math.PI*2);
+    ctx.fillStyle=cfg.color+(dim?'1e':'d9');ctx.fill();
+    ctx.strokeStyle=dim?cfg.color+'25':(isSel?'#fff':cfg.color);
+    ctx.lineWidth=isSel?2.5:1.5;ctx.stroke();
+    if(n.type==='root'&&!dim){
+      ctx.beginPath();ctx.arc(n.x,n.y,r-5,0,Math.PI*2);
+      ctx.strokeStyle='rgba(255,255,255,0.4)';ctx.lineWidth=1;ctx.stroke();
+    }
+    if(!dim||isHov){
+      ctx.fillStyle=dim?'rgba(255,255,255,0.22)':'rgba(226,232,240,0.92)';
+      ctx.font=`${n.type==='root'?600:400} ${n.type==='root'?11:10}px 'Space Grotesk',monospace`;
+      ctx.textAlign='center';ctx.textBaseline='top';
+      const lbl=n.name.length>14?n.name.slice(0,13)+'…':n.name;
+      ctx.fillText(lbl,n.x,n.y+r+5);
+    }
+  });
+  ctx.restore();
+}
+
+function loop(){tick();draw();ticks++;rafId=requestAnimationFrame(loop);}
+
+// ─── INTERACTION ─────────────────────────────────────────────────
+function getOff(e){const r=canvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};}
+function toWorld(cx,cy){return{x:(cx-pan.x)/zoom,y:(cy-pan.y)/zoom};}
+function focusNodeById(id){
+  if(!id)return false;
+  const n=simNodes.find(node=>node.id===id&&node.vis);
+  if(!n)return false;
+  zoom=Math.min(1.65,Math.max(0.9,zoom));
+  pan.x=W/2-n.x*zoom;
+  pan.y=H/2-n.y*zoom;
+  n.vx=0;n.vy=0;
+  return true;
+}
+function hit(wx,wy){
+  for(let i=simNodes.length-1;i>=0;i--){
+    const n=simNodes[i];if(!n.vis)continue;
+    const r=(CFG[n.type]?.r||12)+6;
+    if((wx-n.x)**2+(wy-n.y)**2<r*r)return n;
+  }return null;
+}
+
+canvas.addEventListener('mousedown',e=>{
+  const o=getOff(e),w=toWorld(o.x,o.y);
+  const h=hit(w.x,w.y);
+  if(h){dragging=h;}
+  else{isPanning=true;panStart=o;panOrigin={x:pan.x,y:pan.y};}
+});
+canvas.addEventListener('mousemove',e=>{
+  const o=getOff(e),w=toWorld(o.x,o.y);
+  if(dragging){dragging.x=w.x;dragging.y=w.y;dragging.vx=0;dragging.vy=0;return;}
+  if(isPanning){pan.x=panOrigin.x+(o.x-panStart.x);pan.y=panOrigin.y+(o.y-panStart.y);return;}
+  const h=hit(w.x,w.y);
+  hovId=h?h.id:null;
+  canvas.style.cursor=h?'pointer':'default';
+  const tt=document.getElementById('tooltip');
+  if(h){
+    document.getElementById('tt-name').textContent=h.name;
+    const dot=document.getElementById('tt-dot');
+    dot.style.background=CFG[h.type]?.color||'#fff';
+    dot.style.boxShadow=h.type==='vulnerable'?`0 0 7px ${CFG[h.type].color}`:'none';
+    document.getElementById('tt-type').textContent=TYPE_LBL[h.type]||h.type;
+    document.getElementById('tt-type').style.color=CFG[h.type]?.color||'#fff';
+    document.getElementById('tt-ver').textContent=h.version?`v${h.version}`:'';
+    document.getElementById('tt-src').textContent=h.source||'';
+    document.getElementById('tt-cve').textContent=h.cve||'';
+    let lx=o.x+14,ly=o.y-12;
+    if(lx+215>W)lx=o.x-225;if(ly+130>H)ly=H-140;
+    tt.style.left=lx+'px';tt.style.top=ly+'px';tt.style.opacity='1';
+    tt.style.borderColor=`${CFG[h.type]?.color||'rgba(255,255,255,0.12)'}44`;
+    tt.style.boxShadow=`0 0 20px ${CFG[h.type]?.color||'#fff'}22`;
+  }else{tt.style.opacity='0';}
+});
+canvas.addEventListener('mouseup',e=>{
+  const wasD=dragging; dragging=null;isPanning=false;
+  if(!wasD)return;
+  const o=getOff(e),w=toWorld(o.x,o.y);
+  const h=hit(w.x,w.y);
+  if(h)selectNode(h);
+});
+canvas.addEventListener('click',e=>{
+  if(dragging||isPanning)return;
+  const o=getOff(e),w=toWorld(o.x,o.y);
+  const h=hit(w.x,w.y);
+  if(h)selectNode(h);else{selId=null;closeSidebar();}
+});
+canvas.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const o=getOff(e),d=e.deltaY>0?.87:1.15;
+  pan.x=o.x-(o.x-pan.x)*d;pan.y=o.y-(o.y-pan.y)*d;
+  zoom=Math.min(5,Math.max(.15,zoom*d));
+},{passive:false});
+canvas.addEventListener('mouseleave',()=>{
+  dragging=null;isPanning=false;hovId=null;
+  document.getElementById('tooltip').style.opacity='0';
+});
+window.addEventListener('resize',()=>{
+  W=canvas.offsetWidth;H=canvas.offsetHeight;
+  canvas.width=W;canvas.height=H;
+});
+
+// ─── SIDEBAR ─────────────────────────────────────────────────────
+function selectNode(n){
+  selId=n.id;
+  const sb=document.getElementById('sidebar');
+  sb.classList.add('open');
+  const col=CFG[n.type]?.color||'#fff';
+  document.getElementById('sb-top-line').style.background=`linear-gradient(90deg,${col},transparent)`;
+  document.getElementById('sb-dot').style.cssText=`background:${col};box-shadow:0 0 8px ${col},0 0 16px ${col}55;width:8px;height:8px;border-radius:50%;`;
+  document.getElementById('sb-risk-label').textContent=TYPE_LBL[n.type]||n.type;
+  document.getElementById('sb-risk-label').style.color=col;
+  document.getElementById('sb-name').textContent=n.name;
+  document.getElementById('sb-version').textContent=n.version?`version ${n.version}`:'';
+  document.getElementById('sb-body').innerHTML=buildSidebar(n,col);
+}
+function closeSidebar(){
+  selId=null;
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('hint').style.right='14px';
+}
+
+function esc(v){
+  return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function linkHtml(url,label){
+  if(!url)return '';
+  return `<a class="sb-link" href="${esc(url)}" target="_blank" rel="noopener"><span style="font-size:14px">↗</span> ${esc(label)}</a>`;
+}
+function shortPath(path){
+  return Array.isArray(path)&&path.length?path.join(' → '):'Direct dependency';
+}
+
+// ─── COPY HELPER ─────────────────────────────────────────────────
+function copyText(text, btnEl){
+  navigator.clipboard.writeText(text).then(()=>{
+    const orig=btnEl.innerHTML;
+    btnEl.innerHTML='✓ Copied!';
+    btnEl.classList.add('copied');
+    setTimeout(()=>{btnEl.innerHTML=orig;btnEl.classList.remove('copied');},2000);
+  }).catch(()=>{
+    // Fallback for non-https
+    const ta=document.createElement('textarea');
+    ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');
+    document.body.removeChild(ta);
+    const orig=btnEl.innerHTML;
+    btnEl.innerHTML='✓ Copied!';btnEl.classList.add('copied');
+    setTimeout(()=>{btnEl.innerHTML=orig;btnEl.classList.remove('copied');},2000);
+  });
+}
+
+// ─── FINDING CARDS ───────────────────────────────────────────────
+function findingCards(findings,limit=5){
+  if(!findings||!findings.length)return '';
+  const cards=findings.slice(0,limit).map(f=>{
+    const sc=SEV_COL[f.severity]||'#ef4444',sb2=SEV_BG[f.severity]||'rgba(239,68,68,0.2)';
+    const depType = f.dev ? 'dev' : (f.direct ? 'direct' : 'transitive');
+    return `<div class="sb-mini-item">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+        <strong style="color:#fca5a5">${esc(f.cve||f.osvId)}</strong>
+        <span class="sev-badge" style="background:${sb2};color:${sc};margin-top:0">${esc(f.severity||'Unknown')}</span>
+      </div>
+      <div class="sb-muted">${esc(f.package)}${f.version?` @ ${esc(f.version)}`:''} · ${depType} · depth ${esc(f.depth||1)}</div>
+      ${f.summary?`<div style="margin-top:4px">${esc(f.summary)}</div>`:''}
+      <div class="sb-muted" style="margin-top:4px">${esc(shortPath(f.dependencyPath))}</div>
+      ${f.fix?`<div style="color:#86efac;margin-top:4px">${esc(f.fix)}</div>`:''}
+      ${f.osvUrl?linkHtml(f.osvUrl,'Open OSV advisory'):''}
+    </div>`;
+  }).join('');
+  const more=findings.length>limit?`<div class="sb-muted" style="font-size:11px;margin-top:8px">+ ${findings.length-limit} more finding(s)</div>`:'';
+  return `<div class="sb-card sb-card-vuln">
+    <div class="sb-card-label" style="color:#ef4444">VULNERABILITY DATA</div>
+    <div class="sb-mini-list">${cards}</div>${more}
+  </div>`;
+}
+
+// ─── SIDEBAR BUILDER ─────────────────────────────────────────────
+function buildSidebar(n,col){
+  let h='';
+  const modeBadge = IS_LIVE
+    ? '<span style="font-size:10px;color:#22c55e;padding:2px 6px;background:rgba(34,197,94,0.12);border-radius:4px;border:1px solid rgba(34,197,94,0.25)">● LIVE</span>'
+    : '<span style="font-size:10px;color:#f97316;padding:2px 6px;background:rgba(249,115,22,0.1);border-radius:4px;border:1px solid rgba(249,115,22,0.2)">◌ DEMO</span>';
+
+  if(n.source)h+=`<div class="info-row"><span class="info-label">Source</span><span class="src-badge">${n.source}</span>&nbsp;${modeBadge}</div>`;
+
+  if(n.type==='root'){
+    if(typeof n.exposureScore === 'number')
+      h+=`<div class="info-row"><span class="info-label">Exposure score</span><span class="src-badge">${esc(n.exposureScore)}</span></div>`;
+    if(n.criticalCount)
+      h+=`<div class="info-row"><span class="info-label">Critical findings</span><span class="src-badge" style="color:#ef4444">${esc(n.criticalCount)}</span></div>`;
+    if(n.vulnerabilityCount)
+      h+=`<div class="info-row"><span class="info-label">Total findings</span><span class="src-badge">${esc(n.vulnerabilityCount)}</span></div>`;
+    if(n.branch)h+=`<div class="info-row"><span class="info-label">Branch</span><span class="src-badge">${esc(n.branch)}</span></div>`;
+    if(n.scannedAt)h+=`<div class="info-row"><span class="info-label">Scanned</span><span class="src-badge">${esc(String(n.scannedAt).slice(0,10))}</span></div>`;
+    if(n.commit)h+=`<div class="info-row"><span class="info-label">Commit</span><span class="src-badge" style="font-family:monospace">${esc(String(n.commit).slice(0,12))}</span></div>`;
+    if(n.desc)h+=`<div class="sb-card sb-card-warn"><div class="sb-card-text" style="color:#cbd5e1">${esc(n.desc)}</div></div>`;
+    h+=findingCards(n.findings||[],6);
+    if(n.issueDraft){
+      const draftText=`${n.issueDraft.title}\n\n${n.issueDraft.body}`;
+      const uid='copy-'+Math.random().toString(36).slice(2);
+      h+=`<div class="sb-card sb-card-fix">
+        <div class="sb-card-label" style="color:#22c55e;display:flex;align-items:center;justify-content:space-between">
+          PATCH REQUEST DRAFT
+          <button class="copy-btn" id="${uid}" onclick="copyText(${JSON.stringify(draftText)},this)">⧉ Copy</button>
+        </div>
+        <div class="sb-card-text" style="color:#86efac;font-weight:700;margin-top:8px">${esc(n.issueDraft.title)}</div>
+        <div class="sb-pre">${esc(n.issueDraft.body)}</div>
+      </div>`;
+    }
+    h+=linkHtml(n.repoUrl,'Open repository');
+    return h || '<div class="sb-card sb-card-safe"><div class="sb-card-text" style="color:#4ade80">No backend scan data available for this repository.</div></div>';
+  }
+
+  if(n.findings&&n.findings.length){
+    h+=findingCards(n.findings,4);
+  }
+  if(n.cve){
+    const sc=SEV_COL[n.severity]||'#ef4444',sb2=SEV_BG[n.severity]||'rgba(239,68,68,0.2)';
+    h+=`<div class="sb-card sb-card-vuln">
+      <div class="sb-card-label" style="color:#ef4444">⚠ CVE DETECTED</div>
+      <div style="font-size:13px;font-weight:700;color:#fca5a5;margin-bottom:6px">${n.cve}</div>
+      ${n.desc?`<div class="sb-card-text" style="color:#94a3b8">${n.desc}</div>`:''}
+      ${n.severity?`<span class="sev-badge" style="background:${sb2};color:${sc}">${n.severity}</span>`:''}
+    </div>`;
+  }
+  if(n.fix){
+    h+=`<div class="sb-card sb-card-fix">
+      <div class="sb-card-label" style="color:#22c55e">✓ FIX RECOMMENDATION</div>
+      <div class="sb-card-text" style="color:#86efac">${n.fix}</div>
+    </div>`;
+  }
+  if(n.type==='safe'){
+    h+=`<div class="sb-card sb-card-safe"><div class="sb-card-text" style="color:#4ade80">✓ No known vulnerabilities detected. Package is safe to use.</div></div>`;
+  }
+  if(n.type==='high'&&!n.cve){
+    h+=`<div class="sb-card sb-card-warn">
+      <div class="sb-card-label" style="color:#f97316">⚡ HIGH RISK</div>
+      <div class="sb-card-text" style="color:#fdba74">${n.desc||'Directly depends on a vulnerable package.'}</div>
+      ${n.fix?`<div style="font-size:11px;color:#86efac;margin-top:6px">→ ${n.fix}</div>`:''}
+    </div>`;
+  }
+  if(n.type==='medium'){
+    h+=`<div class="sb-card sb-card-med">
+      <div class="sb-card-label" style="color:#eab308">~ MEDIUM RISK</div>
+      <div class="sb-card-text" style="color:#fde047">${n.desc||'Transitive dependency on a vulnerable package.'}</div>
+    </div>`;
+  }
+  if(n.ecosystem){
+    h+=`<div class="info-row"><span class="info-label">Ecosystem</span><span class="src-badge">${esc(n.ecosystem)}</span></div>`;
+  }
+  if(n.affectedRepos&&n.affectedRepos.length){
+    h+=`<div class="info-row"><span class="info-label">Affects</span><span class="src-badge">${n.affectedRepos.length} repo(s)</span></div>`;
+  }
+  if(n.registryUrl){
+    h+=linkHtml(n.registryUrl,'View on registry');
+  }
+  if(n.repoUrl&&n.repoUrl!==n.registryUrl){
+    h+=linkHtml(n.repoUrl,'Open affected repository');
+  }
+  return h;
+}
+
+// ─── FILTERS ─────────────────────────────────────────────────────
+function applyFilter(){
+  const isCveNode=id=>String(id||'').startsWith('vuln:');
+  const nset=new Set(RAW.nodes.map(n=>n.id));
+  if(!showCveNodes){
+    RAW.nodes.forEach(n=>{
+      if(isCveNode(n.id))nset.delete(n.id);
+    });
+  }
+  if(filterPkg){
+    const pkg=RAW.nodes.find(n=>n.id===filterPkg);
+    if(pkg){
+      const conn=new Set([pkg.id]);
+      RAW.links.forEach(l=>{
+        const other = l.s===pkg.id ? l.t : (l.t===pkg.id ? l.s : null);
+        if(other && (showCveNodes || !isCveNode(other)))conn.add(other);
+      });
+      if(showCveNodes){
+        RAW.links.forEach(l=>{
+          if(conn.has(l.s) && isCveNode(l.t))conn.add(l.t);
+          if(conn.has(l.t) && isCveNode(l.s))conn.add(l.s);
+        });
+      }
+      nset.clear();conn.forEach(id=>nset.add(id));
+    }
+  }
+  if(filterSrc){
+    const matching=new Set(RAW.nodes.filter(n=>n.source===filterSrc||n.type==='root').map(n=>n.id));
+    nset.forEach(id=>{if(!matching.has(id))nset.delete(id);});
+  }
+  if(filterCve){
+    const cve=RAW.nodes.find(n=>n.id===filterCve);
+    if(cve){
+      const conn=new Set([cve.id]);
+      RAW.links.forEach(l=>{
+        const other = l.s===cve.id ? l.t : (l.t===cve.id ? l.s : null);
+        if(other)conn.add(other);
+      });
+      RAW.links.forEach(l=>{
+        if(conn.has(l.s))conn.add(l.t);
+        if(conn.has(l.t))conn.add(l.s);
+      });
+      nset.clear();conn.forEach(id=>nset.add(id));
+    }
+  }
+  simNodes.forEach(n=>{n.vis=nset.has(n.id);});
+  simLinks.forEach(l=>{l.vis=nset.has(l.s)&&nset.has(l.t);});
+  const focusId=filterCve||filterPkg;
+  const bp=document.getElementById('btn-pkg'),bc=document.getElementById('btn-cve'),bs=document.getElementById('btn-src');
+  const pkgNode=filterPkg?RAW.nodes.find(n=>n.id===filterPkg):null;
+  const cveNode=filterCve?RAW.nodes.find(n=>n.id===filterCve):null;
+  if(filterPkg){bp.classList.add('active');bp.innerHTML=`<span style="font-size:10px">⬡</span>${esc(pkgNode?.name||filterPkg)}<button class="filter-clear" onclick="event.stopPropagation();clearPkg()">×</button>`;}
+  else{bp.classList.remove('active');bp.innerHTML=`<span style="font-size:10px">⬡</span> Filter by Package`;}
+  if(filterCve){bc.classList.add('active');bc.innerHTML=`<span style="font-size:10px">!</span>${esc(cveNode?.name||filterCve)}<button class="filter-clear" onclick="event.stopPropagation();clearCve()">×</button>`;}
+  else{bc.classList.remove('active');bc.innerHTML=`<span style="font-size:10px">!</span> Filter by CVE`;}
+  if(filterSrc){bs.classList.add('active');bs.innerHTML=`<span style="font-size:10px">◎</span>${filterSrc}<button class="filter-clear" onclick="event.stopPropagation();clearSrc()">×</button>`;}
+  else{bs.classList.remove('active');bs.innerHTML=`<span style="font-size:10px">◎</span> Filter by Source`;}
+  document.getElementById('btn-clear').style.display=(filterPkg||filterCve||filterSrc)?'inline-block':'none';
+  closeSidebar();
+  if(focusId){
+    selId=focusNodeById(focusId)?focusId:null;
+  }
+  updateStats();
+}
+function toggleCves(checked){
+  showCveNodes=checked;
+  if(!checked)filterCve=null;
+  applyFilter();
+}
+function clearPkg(){filterPkg=null;applyFilter();}
+function clearCve(){filterCve=null;applyFilter();}
+function clearSrc(){filterSrc=null;applyFilter();}
+function clearAll(){filterPkg=null;filterCve=null;filterSrc=null;applyFilter();}
+function updateStats(){
+  const vis=simNodes.filter(n=>n.vis);
+  const visibleCves=vis.filter(n=>String(n.id||'').startsWith('vuln:'));
+  document.getElementById('s-total').textContent=vis.length;
+  document.getElementById('s-vulns').textContent=visibleCves.length || vis.filter(n=>n.type==='vulnerable').length;
+  document.getElementById('s-critical').textContent=vis.filter(n=>n.severity==='Critical'&&(showCveNodes||!String(n.id||'').startsWith('vuln:'))).length;
+  document.getElementById('s-affected').textContent=vis.filter(n=>['vulnerable','high','medium'].includes(n.type)).length;
+}
+
+// ─── FILTER MODAL ────────────────────────────────────────────────
+function openModal(mode){
+  modalMode=mode;
+  const ov=document.getElementById('modal-overlay');
+  const ti=document.getElementById('modal-title');
+  const sr=document.getElementById('modal-search');
+  ti.textContent=mode==='package'?'Filter by Package / Repo':(mode==='cve'?'Filter by CVE':'Filter by Source');
+  sr.style.display=(mode==='package'||mode==='cve')?'block':'none';
+  sr.value='';
+  ov.classList.add('open');
+  renderModalList();
+  if(mode==='package'||mode==='cve')setTimeout(()=>sr.focus(),50);
+}
+function closeModal(){document.getElementById('modal-overlay').classList.remove('open');}
+function renderModalList(){
+  const list=document.getElementById('modal-list');
+  const q=(document.getElementById('modal-search').value||'').toLowerCase();
+  let items,current;
+  if(modalMode==='package'){
+    items=RAW.nodes
+      .filter(n=>!String(n.id||'').startsWith('vuln:'))
+      .map(n=>({id:n.id,name:n.name,kind:n.type==='root'?'repo':'package'}))
+      .filter((item,idx,arr)=>arr.findIndex(x=>x.id===item.id)===idx)
+      .filter(item=>item.name.toLowerCase().includes(q))
+      .sort((a,b)=>(a.kind===b.kind?a.name.localeCompare(b.name):a.kind==='repo'?-1:1));
+    current=filterPkg;
+  }else if(modalMode==='cve'){
+    items=RAW.nodes
+      .filter(n=>String(n.id||'').startsWith('vuln:'))
+      .map(n=>({id:n.id,name:n.name,kind:'cve'}))
+      .filter(item=>item.name.toLowerCase().includes(q))
+      .sort((a,b)=>a.name.localeCompare(b.name));
+    current=filterCve;
+  }else{
+    items=['npm','PyPI','Maven','GitHub'].map(name=>({id:name,name,kind:'source'}));
+    current=filterSrc;
+  }
+  let html=`<div class="modal-item${!current?' selected':''}" onclick="selectFilter(null)"><span class="modal-dot"></span>All</div>`;
+  if(items.length===0)html+=`<div class="modal-empty">No items found</div>`;
+  else items.forEach(it=>{
+    const sel=current===it.id;
+    const repoClass=it.kind==='repo'?' repo-option':'';
+    const kindLabel=it.kind==='repo'?'Repo':(it.kind==='cve'?'CVE':'');
+    html+=`<div class="modal-item${repoClass}${sel?' selected':''}" onclick="selectFilter('${esc(it.id)}')"><span class="modal-dot"></span>${esc(it.name)}${kindLabel?`<span class="modal-kind">${kindLabel}</span>`:''}</div>`;
+  });
+  list.innerHTML=html;
+}
+function selectFilter(val){
+  if(modalMode==='package')filterPkg=val;
+  else if(modalMode==='cve'){
+    filterCve=val;
+    if(val){
+      showCveNodes=true;
+      const toggle=document.getElementById('toggle-cves');
+      if(toggle)toggle.checked=true;
+    }
+  }else filterSrc=val;
+  closeModal();applyFilter();
+}
+
+// ─── PIPELINE ────────────────────────────────────────────────────
+function togglePipeline(){
+  const ov=document.getElementById('pipeline-overlay');
+  const open=ov.classList.toggle('open');
+  if(open) fetchAndShowStatus();
+}
+function closePipeline(){
+  document.getElementById('pipeline-overlay').classList.remove('open');
+}
+
+async function fetchAndShowStatus(){
+  const box=document.getElementById('pipe-status-box');
+  box.textContent='Checking…';
+  try{
+    const r=await fetch(STATUS_URL,{signal:AbortSignal.timeout(5000)});
+    const s=await r.json();
+    updatePipelineStatus(s);
+  }catch(e){
+    box.textContent='Backend unreachable';
+    box.style.color='#fca5a5';
+  }
+}
+
+function updatePipelineStatus(s){
+  const box=document.getElementById('pipe-status-box');
+  if(!s){return;}
+  if(s.hasData){
+    box.innerHTML=`<span style="color:#86efac">● Connected</span>  ·  ${s.vulnerabilities} CVEs  ·  ${s.repos} repos  ·  ${s.findings} findings  ·  ${s.graphNodes} graph nodes`;
+  } else {
+    box.innerHTML=`<span style="color:#f97316">◌ Empty</span>  ·  ${s.vulnerabilities} CVEs  ·  ${s.repos} repos  ·  ${s.graphNodes} graph nodes  —  Run pipeline below`;
+  }
+}
+
+function pipeLog(logId, msg, type=''){
+  const el=document.getElementById(logId);
+  el.classList.add('show');
+  const line=document.createElement('div');
+  if(type==='ok')line.className='pipe-log-ok';
+  if(type==='err')line.className='pipe-log-err';
+  line.textContent=msg;
+  el.appendChild(line);
+  el.scrollTop=el.scrollHeight;
+}
+function pipeClear(logId){
+  const el=document.getElementById(logId);
+  el.innerHTML='';el.classList.remove('show');
+}
+
+async function runIngest(){
+  const pkg=document.getElementById('ingest-pkg').value.trim();
+  const eco=document.getElementById('ingest-eco').value.trim();
+  if(!pkg||!eco){alert('Enter package name and ecosystem.');return;}
+  pipeClear('ingest-log');
+  pipeLog('ingest-log',`Querying OSV for ${eco}/${pkg}…`);
+  try{
+    const r=await fetch(`/api/pipeline/ingest?package=${encodeURIComponent(pkg)}&ecosystem=${encodeURIComponent(eco)}`,{method:'POST'});
+    const d=await r.json();
+    if(d.ok){
+      pipeLog('ingest-log',`✓ ${d.message}`,'ok');
+    } else {
+      pipeLog('ingest-log',`✗ ${d.error}`,'err');
+    }
+  }catch(e){pipeLog('ingest-log',`✗ ${e.message}`,'err');}
+  fetchAndShowStatus();
+}
+
+async function runScan(force=false){
+  const url=document.getElementById('scan-url').value.trim();
+  if(!url){alert('Enter a GitHub repo URL.');return;}
+  pipeClear('scan-log');
+  pipeLog('scan-log',`Scanning ${url}…`);
+  try{
+    const r=await fetch(`/api/pipeline/scan?url=${encodeURIComponent(url)}&force=${force}`,{method:'POST'});
+    const d=await r.json();
+    if(d.ok){
+      if(d.skipped){
+        pipeLog('scan-log',`⟳ Skipped — already scanned at ${d.revisionId}`);
+      } else {
+        pipeLog('scan-log',`✓ ${d.status} · ${d.findings} finding(s) · manifests: ${(d.manifests||[]).join(', ')||'none'}`,'ok');
+        if(d.findings>0){
+          const sevStr=Object.entries(d.severityCounts||{}).filter(([,v])=>v>0).map(([k,v])=>`${v} ${k}`).join(', ');
+          pipeLog('scan-log',`  Severity: ${sevStr}`);
+        }
+      }
+    } else {
+      pipeLog('scan-log',`✗ ${d.error}`,'err');
+    }
+  }catch(e){pipeLog('scan-log',`✗ ${e.message}`,'err');}
+  fetchAndShowStatus();
+}
+
+async function runBuildGraph(){
+  let graphBuiltOk=false;
+  pipeClear('graph-log');
+  pipeLog('graph-log','Rebuilding graph…');
+  try{
+    const r=await fetch('/api/pipeline/build-graph',{method:'POST'});
+    const d=await r.json();
+    graphBuiltOk=!!d.ok;
+    if(d.ok){
+      pipeLog('graph-log',`✓ ${d.message}`,'ok');
+    } else {
+      pipeLog('graph-log',`✗ ${d.error}`,'err');
+    }
+  }catch(e){pipeLog('graph-log',`✗ ${e.message}`,'err');}
+  if(graphBuiltOk){
+    await refreshGraph();
+    return;
+  }
+  fetchAndShowStatus();
+}
+
+// ─── LOADER ──────────────────────────────────────────────────────
+function showLoader(msg){
+  let el=document.getElementById('loader-overlay');
+  if(!el){
+    el=document.createElement('div');
+    el.id='loader-overlay';
+    el.style.cssText=`
+      position:fixed;inset:0;z-index:999;display:flex;flex-direction:column;
+      align-items:center;justify-content:center;gap:14px;
+      background:rgba(7,11,20,0.92);backdrop-filter:blur(8px);
+    `;
+    el.innerHTML=`
+      <div id="loader-spinner" style="width:36px;height:36px;border-radius:50%;
+        border:2.5px solid rgba(59,130,246,0.2);border-top-color:#3b82f6;
+        animation:spin 0.7s linear infinite;"></div>
+      <div id="loader-msg" style="font-size:13px;color:#64748b;font-family:'Space Grotesk',monospace"></div>
+      <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+    `;
+    document.body.appendChild(el);
+  }
+  document.getElementById('loader-msg').textContent=msg;
+  el.style.display='flex';
+}
+function showLoaderError(msg){
+  const spinner=document.getElementById('loader-spinner');
+  if(spinner){spinner.style.borderTopColor='#ef4444';spinner.style.animationDuration='99s';}
+  const m=document.getElementById('loader-msg');
+  if(m){m.textContent=msg;m.style.color='#f97316';}
+}
+function hideLoader(){
+  const el=document.getElementById('loader-overlay');
+  if(el)el.style.display='none';
+}
+
+// ─── BOOT ────────────────────────────────────────────────────────
+window.addEventListener('load', async()=>{
+  await loadGraphData();
+  initGraph();
+});
+window.addEventListener('resize',()=>{W=canvas.offsetWidth;H=canvas.offsetHeight;canvas.width=W;canvas.height=H;});
+</script>
+</body>
+</html>
