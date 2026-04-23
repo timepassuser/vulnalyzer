@@ -1,4 +1,4 @@
-# Vulnalyzer
+# Vulnalyze
 
 **Open-Source Dependency Exploit Propagation Mapper**
 
